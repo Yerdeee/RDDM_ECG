@@ -2,9 +2,7 @@
 Region-Disentangled Diffusion Model for High-Fidelity PPG-to-ECG Translation
 </h1>
 
-<h3>
-  RDDM 구조를 활용해서 ecg lead1 -> lead 생성 후 분류 실험을 위한 repo
-</h3>
+RDDM 구조를 활용해서 ecg lead1 -> lead 생성 후 분류 실험을 위한 repo  
 
 ### 논문 사이트 (https://arxiv.org/abs/2308.13568)
 
