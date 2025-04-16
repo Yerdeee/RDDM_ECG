@@ -56,7 +56,8 @@ metrics.py 수정
 - 크기 reshape 512 고정 -> 1280 변경 (실험 세팅에 맞춰서)
 data_withdiffusion 추가
 - diffusion모델로 lead 생성 후 dataloader로 전환하는 함수 추가
-사용예시
+  
+### 사용예시
 
 ```python
 from data_withdiffusion import get_dataset_withdiffusion
