@@ -9,10 +9,10 @@ RDDM 구조를 활용해서 ecg lead1 -> lead 생성 후 분류 실험을 위한
 
 ## 2025.04.16 수정  
 
-metrics.py 수정  
+1. metrics.py 수정  
 - 크기 reshape 512 고정 -> 1280 변경 (실험 세팅에 맞춰서)
 
-data_withdiffusion 추가
+2. data_withdiffusion 추가
 - diffusion모델로 lead 생성 후 dataloader로 전환하는 함수 추가
   
 ### 사용예시
