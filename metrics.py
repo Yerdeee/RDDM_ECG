@@ -36,8 +36,8 @@ def fid_statistics_to_metric(stat_1, stat_2):
 
 def calculate_FD(true_ecg, fake_ecg):
         
-    true_stats = fid_features_to_statistics(true_ecg.reshape(-1, 512).cpu())
-    fake_stats = fid_features_to_statistics(fake_ecg.reshape(-1, 512).cpu())
+    true_stats = fid_features_to_statistics(true_ecg.reshape(-1, 1280).cpu())
+    fake_stats = fid_features_to_statistics(fake_ecg.reshape(-1, 1280).cpu())
     
     fd = fid_statistics_to_metric(true_stats, fake_stats) 
     
