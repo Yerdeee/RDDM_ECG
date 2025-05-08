@@ -43,12 +43,12 @@ def pad_along_axis(array: np.ndarray, target_length: int, axis: int = 0) -> np.n
 
     return np.pad(array, pad_width=npad, mode='constant', constant_values=0)
 
-def eval_diffusion(window_size, EVAL_DATASETS, nT=10, batch_size=32, PATH="/tf/hsh/SW_ECG/PPG2ECG/", device="cuda"):
+def eval_diffusion(window_size, EVAL_DATASETS, nT=10, batch_size=32, PATH="/cap/RDDM-main/hsh/ECG2ECG_FINAL/LEAD1TO12/", device="cuda", check_sig = False):
 
     _, dataset_test = get_datasets(datasets=EVAL_DATASETS, window_size=window_size)
 
     testloader = DataLoader(dataset_test, batch_size=batch_size, shuffle=True, num_workers=64)
-
+    #, Conditioning_network2 
     dpm, Conditioning_network1, Conditioning_network2 = load_pretrained_DPM(
         PATH=PATH,
         nT=nT,
@@ -80,11 +80,11 @@ def eval_diffusion(window_size, EVAL_DATASETS, nT=10, batch_size=32, PATH="/tf/h
 
             generated_windows = []
 
-            for ppg_window in torch.split(x_ppg, 128*4, dim=-1):
+            for ppg_window in torch.split(x_ppg, 128*window_size, dim=-1):
                 
-                if ppg_window.shape[-1] != 128*4:
+                if ppg_window.shape[-1] != 128*window_size:
                     
-                    ppg_window = F.pad(ppg_window, (0, 128*4 - ppg_window.shape[-1]), "constant", 0)
+                    ppg_window = F.pad(ppg_window, (0, 128*window_size - ppg_window.shape[-1]), "constant", 0)
 
                 ppg_conditions1 = Conditioning_network1(ppg_window)
                 ppg_conditions2 = Conditioning_network2(ppg_window)
@@ -93,21 +93,100 @@ def eval_diffusion(window_size, EVAL_DATASETS, nT=10, batch_size=32, PATH="/tf/h
                     cond1=ppg_conditions1, 
                     cond2=ppg_conditions2, 
                     mode="sample", 
-                    window_size=128*4
+                    window_size=128*window_size
                 )
                 
                 generated_windows.append(xh.cpu().numpy())
 
             xh = np.concatenate(generated_windows, axis=-1)[:, :, :128*window_size]
 
-            fd = calculate_FD(y_ecg, torch.from_numpy(xh).to(device))
+            fd = calculate_FD(y_ecg, torch.from_numpy(xh).to(device), window_size)
 
             fake_ecgs = np.concatenate((fake_ecgs, xh.reshape(-1, 128*window_size)))
             real_ecgs = np.concatenate((real_ecgs, y_ecg.reshape(-1, 128*window_size).cpu().numpy()))
             real_ppgs = np.concatenate((real_ppgs, x_ppg.reshape(-1, 128*window_size).cpu().numpy()))
             true_rois = np.concatenate((true_rois, ecg_roi.reshape(-1, 128*window_size).cpu().numpy()))
             fd_list.append(fd)
+            
+            if check_sig == True :
+                return fake_ecgs, real_ecgs, real_ppgs
 
+        mae_hr_ecg, rmse_score = evaluation_pipeline(real_ecgs[1:], fake_ecgs[1:])
+        
+        
+        tracked_metrics = {
+            "RMSE_score": rmse_score,
+            "MAE_HR_ECG": mae_hr_ecg,
+            "FD": sum(fd_list) / len(fd_list),
+        }
+
+        return tracked_metrics
+
+
+def eval_diffusion_naive(window_size, EVAL_DATASETS, nT=10, batch_size=32, PATH="/cap/jhk/RDDM/NaiveDDPM/ECG2ECG12/", device="cuda"):
+
+    _, dataset_test = get_datasets(datasets=EVAL_DATASETS, window_size=window_size)
+
+    testloader = DataLoader(dataset_test, batch_size=batch_size, shuffle=True, num_workers=64)
+    
+    dpm, Conditioning_network1, Conditioning_network2 = load_pretrained_DPM(
+        PATH=PATH,
+        nT=nT,
+        type="Naive",
+        device="cuda"
+    )
+    
+    dpm = nn.DataParallel(dpm)
+    Conditioning_network1 = nn.DataParallel(Conditioning_network1)
+
+    dpm.eval()
+    Conditioning_network1.eval()
+
+    with torch.no_grad():
+
+        fd_list = []
+        fake_ecgs = np.zeros((1, 128*window_size))
+        real_ecgs = np.zeros((1, 128*window_size))
+        real_ppgs = np.zeros((1, 128*window_size))
+        true_rois = np.zeros((1, 128*window_size))
+
+        for y_ecg, x_ppg, ecg_roi in tqdm(testloader):
+
+            x_ppg = x_ppg.float().to(device)
+            y_ecg = y_ecg.float().to(device)
+            ecg_roi = ecg_roi.float().to(device)
+
+            generated_windows = []
+
+            for ppg_window in torch.split(x_ppg, 128*window_size, dim=-1):
+                
+                if ppg_window.shape[-1] != 128*window_size:
+                    
+                    ppg_window = F.pad(ppg_window, (0, 128*window_size - ppg_window.shape[-1]), "constant", 0)
+
+                ppg_conditions1 = Conditioning_network1(ppg_window)
+                
+                xh = dpm(
+                    cond=ppg_conditions1, 
+                    mode="sample", 
+                    window_size=128*window_size
+                )
+                
+                generated_windows.append(xh.cpu().numpy())
+
+            xh = np.concatenate(generated_windows, axis=-1)[:, :, :128*window_size]
+
+            fd = calculate_FD(y_ecg, torch.from_numpy(xh).to(device), window_size)
+
+            fake_ecgs = np.concatenate((fake_ecgs, xh.reshape(-1, 128*window_size)))
+            real_ecgs = np.concatenate((real_ecgs, y_ecg.reshape(-1, 128*window_size).cpu().numpy()))
+            real_ppgs = np.concatenate((real_ppgs, x_ppg.reshape(-1, 128*window_size).cpu().numpy()))
+            true_rois = np.concatenate((true_rois, ecg_roi.reshape(-1, 128*window_size).cpu().numpy()))
+
+            
+            fd_list.append(fd)
+
+        
         mae_hr_ecg, rmse_score = evaluation_pipeline(real_ecgs[1:], fake_ecgs[1:])
 
         tracked_metrics = {
@@ -121,11 +200,11 @@ def eval_diffusion(window_size, EVAL_DATASETS, nT=10, batch_size=32, PATH="/tf/h
 if __name__ == "__main__":
 
     config = {
-        "batch_size": 32,
+        "batch_size": 16,
         "nT": 10,
         "device": "cuda",
-        "window_size": 4, # Seconds
-        "eval_datasets": ["WESAD"]
+        "window_size": 10, # Seconds
+        "eval_datasets": ["PTBXL"]
     }
 
     # TABLE 1 results
@@ -133,7 +212,16 @@ if __name__ == "__main__":
     # for dataset_name in ["WESAD", "CAPNO", "DALIA", "BIDMC", "MIMIC-AFib"]:
     for dataset_name in ["PTBXL"]:     
         tracked_metrics = eval_diffusion(
-            window_size=4,
+            window_size=5,
+            EVAL_DATASETS=[dataset_name],
+            nT=10,
+        )
+        print(f"\n{dataset_name}: RMSE is {tracked_metrics['RMSE_score']}, FD is {tracked_metrics['FD']}")
+        print("-"*1000)
+
+    for dataset_name in ["PTBXL"]:     
+        tracked_metrics = eval_diffusion_naive(
+            window_size=5,
             EVAL_DATASETS=[dataset_name],
             nT=10,
         )

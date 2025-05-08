@@ -16,6 +16,7 @@ def fid_features_to_statistics(features):
     features = features.numpy()
     mu = np.mean(features, axis=0)
     sigma = np.cov(features, rowvar=False)
+
     return {
         'mu': mu,
         'sigma': sigma,
@@ -23,22 +24,23 @@ def fid_features_to_statistics(features):
 
 
 def fid_statistics_to_metric(stat_1, stat_2):
+
     mu1, sigma1 = stat_1['mu'], stat_1['sigma']
     mu2, sigma2 = stat_2['mu'], stat_2['sigma']
     assert mu1.ndim == 1 and mu1.shape == mu2.shape and mu1.dtype == mu2.dtype
     assert sigma1.ndim == 2 and sigma1.shape == sigma2.shape and sigma1.dtype == sigma2.dtype
-
+    
     diff = mu1 - mu2
     tr_covmean = np.sum(np.sqrt(np.linalg.eigvals(sigma1.dot(sigma2)).astype('complex128')).real)
     fid = float(diff.dot(diff) + np.trace(sigma1) + np.trace(sigma2) - 2 * tr_covmean)
 
     return fid
 
-def calculate_FD(true_ecg, fake_ecg):
-        
-    true_stats = fid_features_to_statistics(true_ecg.reshape(-1, 1280).cpu())
-    fake_stats = fid_features_to_statistics(fake_ecg.reshape(-1, 1280).cpu())
+def calculate_FD(true_ecg, fake_ecg, window_size):
     
+    true_stats = fid_features_to_statistics(true_ecg.reshape(-1, 128*window_size).cpu())
+    fake_stats = fid_features_to_statistics(fake_ecg.reshape(-1, 128*window_size).cpu())
+
     fd = fid_statistics_to_metric(true_stats, fake_stats) 
     
     return fd
@@ -116,7 +118,7 @@ def heartbeats_ppg(filtered, sampling_rate):
     return hr_idx, hr
       
     
-def ecg_bpm_array(ecg_signal, sampling_rate=128, window=4, filter=False):
+def ecg_bpm_array(ecg_signal, sampling_rate=128, window=10, filter=False):
 
     final_bpm = []
     for k in ecg_signal:
@@ -128,7 +130,7 @@ def ecg_bpm_array(ecg_signal, sampling_rate=128, window=4, filter=False):
         final_bpm.append(bpm)    
     return np.array(final_bpm)    
 
-def ppg_bpm_array(ppg_signal, sampling_rate=128, window=4):
+def ppg_bpm_array(ppg_signal, sampling_rate=128, window=10):
     
     final_bpm = []
     # count=0
@@ -145,7 +147,7 @@ def ppg_bpm_array(ppg_signal, sampling_rate=128, window=4):
 
     return np.array(final_bpm) 
 
-def MAE_hr(real_ecg, fake_ecg, ecg_sampling_freq=128, window_size=4):
+def MAE_hr(real_ecg, fake_ecg, ecg_sampling_freq=128, window_size=10):
 
      ######################## HR estimation from Fake ECG ######################
 
