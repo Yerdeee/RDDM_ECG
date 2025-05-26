@@ -5,7 +5,7 @@ from tqdm import tqdm
 import warnings
 warnings.filterwarnings("ignore")
 import numpy as np
-from model import DiffusionUNetCrossAttention, ConditionNet
+from model import DiffusionUNetCrossAttention, ConditionNet, ConditionNetWithFFT
 from diffusion import RDDM
 from data import get_datasets
 import torch.nn as nn
@@ -45,6 +45,7 @@ def train_rddm(config, resume_epoch=None):
     alphafft = config["alphafft"]
     PATH = config["PATH"]
     with_fftloss = config["with_fftloss"]
+    with_fftcond = config["with_fftcond"]
     sampling_fate = config["sampling_rate"]
     cutoff_freq = config["cutoff_freq"]
 
@@ -65,6 +66,11 @@ def train_rddm(config, resume_epoch=None):
         n_T=nT
     )
 
+    if with_fftcond :
+        
+        Conditioning_network1 = ConditionNetWithFFT(device=device).to(device)
+        Conditioning_network2 = ConditionNetWithFFT(device=device).to(device)
+    
     Conditioning_network1 = ConditionNet().to(device)
     Conditioning_network2 = ConditionNet().to(device)
     rddm.to(device)
@@ -156,7 +162,8 @@ if __name__ == "__main__":
         "PATH": "/cap/RDDM-main/hsh/ECG2ECG_FINAL/LEAD1TO4/withfft/",
         "with_fftloss" : True ,
         "sampling_rate" : 128 ,
-        "cutoff_freq" : 30.0 
+        "cutoff_freq" : 30.0  ,
+        "with_fftcond" : True
     }
 
     train_rddm(config)

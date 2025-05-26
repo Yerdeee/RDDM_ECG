@@ -466,6 +466,122 @@ class ConditionNet(nn.Module):
             "down_conditions": [d1, d2, d3, d4, d5, d6],
             "up_conditions": [u1, u2, u3, u4, u5],
         }
+    
+    
+class ConditionNetWithFFT(nn.Module):
+    def __init__(self, device="cuda"): # device 파라미터 추가
+        super().__init__()
+        self.device = device # device 속성 설정
+
+        # Time domain path
+        self.inc_time = DoubleConv(1, 32)  # Output channels reduced to 32 to match FFT path before concatenation
+        self.down1_time = Down(32, 64)
+        self.down2_time = Down(64, 128)
+        self.down3_time = Down(128, 256)
+        self.down4_time = Down(256, 512)
+        self.down5_time = Down(512, 512) # Last down_time to match d6_combined channels
+
+        # Frequency domain path
+        self.inc_freq = DoubleConv(1, 32) # Output channels reduced to 32
+        self.down1_freq = Down(32, 64)
+        self.down2_freq = Down(64, 128)
+        self.down3_freq = Down(128, 256)
+        self.down4_freq = Down(256, 512)
+        self.down5_freq = Down(512, 512) # Last down_freq to match d6_combined channels
+
+        # Combined path (after concatenating time and frequency features)
+        # Channels are doubled because of concatenation
+        self.down1_c = Down(64, 128)    # Input: 32(time)+32(freq) = 64
+        self.down2_c = Down(128, 256)
+        self.down3_c = Down(256, 512)
+        self.down4_c = Down(512, 1024)
+        self.down5_c = Down(1024, 1024) # Kept 1024 to match d6_combined
+
+        # Upsampling path
+        self.up1_c = SegmentUp(1024, 512)
+        self.up2_c = SegmentUp(512, 256)
+        self.up3_c = SegmentUp(256, 128)
+        self.up4_c = SegmentUp(128, 64)
+        self.up5_c = SegmentUp(64, 32) # Final up_condition channel size
+
+    def forward(self, x_time, x_fft=None, verbose=False):
+        """
+        Input:
+        - x_time: Time domain signal [B, 1, T]
+        - x_fft: Frequency domain signal [B, 1, F] (magnitude of complex numbers) - Optional
+        """
+        B = x_time.shape[0]
+
+        if x_fft is None:
+            if verbose:
+                print(f"x_time shape for rfft: {x_time.squeeze(1).shape}")
+            
+            # Perform FFT on the time domain signal if x_fft is not provided
+            # Ensure x_time is [B, T] for rfft's last dimension processing
+            x_fft_calc = torch.abs(torch.fft.rfft(x_time.squeeze(1), dim=1, norm="ortho"))
+            
+            if verbose:
+                print(f"x_fft_calc after rfft shape: {x_fft_calc.shape}")
+            
+            x_fft_calc = x_fft_calc.unsqueeze(1)  # Reshape to [B, 1, F]
+            
+            if verbose:
+                print(f"x_fft_calc after unsqueeze shape: {x_fft_calc.shape}")
+            
+            # Interpolate to match the original signal length T
+            x_fft = F.interpolate(x_fft_calc, size=x_time.shape[2], mode='linear', align_corners=False)
+            if verbose:
+                print(f"x_fft after interpolate shape: {x_fft.shape}")
+        elif verbose:
+            print(f"Using provided x_fft with shape: {x_fft.shape}")
+            # If x_fft is provided, ensure it has the correct shape [B, 1, T]
+            if x_fft.shape[2] != x_time.shape[2]:
+                 x_fft = F.interpolate(x_fft, size=x_time.shape[2], mode='linear', align_corners=False)
+                 if verbose:
+                    print(f"Interpolated provided x_fft to shape: {x_fft.shape}")
+
+
+        # Initial convolution for time and frequency paths
+        t_d1 = self.inc_time(x_time) # [B, 32, T]
+        f_d1 = self.inc_freq(x_fft)   # [B, 32, T]
+
+        if verbose:
+            print(f"t_d1 shape: {t_d1.shape}, f_d1 shape: {f_d1.shape}")
+
+        # Concatenate initial features
+        d1_combined = torch.cat([t_d1, f_d1], dim=1) # [B, 64, T]
+        if verbose:
+            print(f"d1_combined shape: {d1_combined.shape}")
+
+        # Downsampling path using combined features
+        d2_combined = self.down1_c(d1_combined) # [B, 128, T/2]
+        if verbose: print(f"d2_combined shape: {d2_combined.shape}")
+        d3_combined = self.down2_c(d2_combined) # [B, 256, T/4]
+        if verbose: print(f"d3_combined shape: {d3_combined.shape}")
+        d4_combined = self.down3_c(d3_combined) # [B, 512, T/8]
+        if verbose: print(f"d4_combined shape: {d4_combined.shape}")
+        d5_combined = self.down4_c(d4_combined) # [B, 1024, T/16]
+        if verbose: print(f"d5_combined shape: {d5_combined.shape}")
+        d6_combined = self.down5_c(d5_combined) # [B, 1024, T/32]
+        if verbose: print(f"d6_combined shape: {d6_combined.shape}")
+
+        # Upsampling path
+        u1 = self.up1_c(d6_combined) # [B, 512, T/16]
+        if verbose: print(f"u1 shape: {u1.shape}")
+        u2 = self.up2_c(u1)          # [B, 256, T/8]
+        if verbose: print(f"u2 shape: {u2.shape}")
+        u3 = self.up3_c(u2)          # [B, 128, T/4]
+        if verbose: print(f"u3 shape: {u3.shape}")
+        u4 = self.up4_c(u3)          # [B, 64, T/2]
+        if verbose: print(f"u4 shape: {u4.shape}")
+        u5 = self.up5_c(u4)          # [B, 32, T]
+        if verbose: print(f"u5 shape: {u5.shape}")
+
+        return {
+            "down_conditions": [d1_combined, d2_combined, d3_combined, d4_combined, d5_combined, d6_combined],
+            "up_conditions": [u1, u2, u3, u4, u5],
+        }
+        
 
 if __name__ == "__main__":
 
