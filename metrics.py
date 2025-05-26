@@ -11,6 +11,22 @@ from biosppy.signals import tools as tools
 import neurokit2.ppg as ppg_func
 from torchmetrics.functional import pearson_corrcoef
 
+def compute_fft_loss(pred_signal: torch.Tensor, target_signal: torch.Tensor) -> torch.Tensor:
+    """
+    pred_signal과 target_signal의 푸리에 스펙트럼을 계산해
+    두 스펙트럼 간 차이를 L1 로스로 반환합니다.
+    """
+    pred_fft = torch.fft.rfft(pred_signal, dim=-1)
+    target_fft = torch.fft.rfft(target_signal, dim=-1)
+    
+    pred_mag = torch.abs(pred_fft)
+    target_mag = torch.abs(target_fft)
+    
+    fft_loss = torch.mean(torch.abs(pred_mag - target_mag))  # L1
+    return fft_loss
+
+
+
 def fid_features_to_statistics(features):
     assert torch.is_tensor(features) and features.dim() == 2
     features = features.numpy()

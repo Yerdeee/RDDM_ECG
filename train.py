@@ -32,7 +32,7 @@ def set_deterministic(seed):
 
 set_deterministic(31)
 
-def train_rddm(config):
+def train_rddm(config, resume_epoch=None):
 
     n_epoch = config["n_epoch"]
     device = config["device"]
@@ -42,12 +42,15 @@ def train_rddm(config):
     cond_mask = config["cond_mask"]
     alpha1 = config["alpha1"]
     alpha2 = config["alpha2"]
+    alphafft = config["alphafft"]
     PATH = config["PATH"]
+    with_fftloss = config["with_fftloss"]
+    sampling_fate = config["sampling_rate"]
+    cutoff_freq = config["cutoff_freq"]
 
     wandb.init(
         project="RDDM",
-        #entity="tjtgus",
-        id=f"ECG1TOECG3",
+        id=f"ECG1TOECG4",
         config=config
     )
 
@@ -72,9 +75,20 @@ def train_rddm(config):
     Conditioning_network1 = nn.DataParallel(Conditioning_network1)
     Conditioning_network2 = nn.DataParallel(Conditioning_network2)
 
-    #scheduler = CosineAnnealingLRWarmup(optim, T_max=1000, T_warmup=20)
-
     scheduler = CosineAnnealingLRWarmup(optim, 20, 500)
+
+
+    if resume_epoch is not None:
+        checkpoint_rddm = f"{PATH}/RDDM_epoch{resume_epoch}.pth"
+        checkpoint_cond1 = f"{PATH}/ConditionNet1_epoch{resume_epoch}.pth"
+        checkpoint_cond2 = f"{PATH}/ConditionNet2_epoch{resume_epoch}.pth"
+
+        print(f"Resuming from epoch {resume_epoch} checkpoints...")
+        rddm.load_state_dict(torch.load(checkpoint_rddm, map_location=device))
+        Conditioning_network1.load_state_dict(torch.load(checkpoint_cond1, map_location=device))
+        Conditioning_network2.load_state_dict(torch.load(checkpoint_cond2, map_location=device))
+
+    
     
     for i in range(n_epoch):
         print(f"\n****************** Epoch - {i} *******************\n\n")
@@ -84,23 +98,28 @@ def train_rddm(config):
         Conditioning_network2.train()
         pbar = tqdm(dataloader)
 
-        for y_ecg, x_ppg, ecg_roi in pbar:
+        for y_ecg, x_ecg, ecg_roi in pbar:
             
             ## Train Diffusion
-            optim.zero_grad()
-            x_ppg = x_ppg.float().to(device)
+            optim.zero_grad() 
+            x_ecg = x_ecg.float().to(device)
             y_ecg = y_ecg.float().to(device)
             ecg_roi = ecg_roi.float().to(device)
 
-            ppg_conditions1 = Conditioning_network1(x_ppg)#, drop_prob=cond_mask)
-            ppg_conditions2 = Conditioning_network2(x_ppg)#, drop_prob=cond_mask)
+            ecg_conditions1 = Conditioning_network1(x_ecg)
+            ecg_conditions2 = Conditioning_network2(x_ecg)
 
-            ddpm_loss, region_loss = rddm(x=y_ecg, cond1=ppg_conditions1, cond2=ppg_conditions2, patch_labels=ecg_roi)
+            ddpm_loss, region_loss = rddm(x=y_ecg, cond1=ecg_conditions1, cond2=ecg_conditions2, patch_labels=ecg_roi)
+
+            fft_loss = 0
+            if with_fftloss :
+                fft_loss = compute_fft_loss(y_ecg, x_ecg)
 
             ddpm_loss = alpha1 * ddpm_loss
             region_loss = alpha2 * region_loss
+            fft_loss = alphafft * fft_loss
             
-            loss = ddpm_loss + region_loss
+            loss = ddpm_loss + region_loss + fft_loss
 
             loss.mean().backward()
             
@@ -111,11 +130,12 @@ def train_rddm(config):
             wandb.log({
                 "DDPM_loss": ddpm_loss.mean().item(),
                 "Region_loss": region_loss.mean().item(),
+                "fft_loss" : fft_loss.mean().item()
             })
 
         scheduler.step()
 
-        if i % 80 == 0:
+        if i % 30 == 0:
             torch.save(rddm.module.state_dict(), f"{PATH}/RDDM_epoch{i}.pth")
             torch.save(Conditioning_network1.module.state_dict(), f"{PATH}/ConditionNet1_epoch{i}.pth")
             torch.save(Conditioning_network2.module.state_dict(), f"{PATH}/ConditionNet2_epoch{i}.pth")
@@ -124,15 +144,19 @@ def train_rddm(config):
 if __name__ == "__main__":
 
     config = {
-        "n_epoch": 500,
-        "batch_size": 16,
+        "n_epoch": 181,
+        "batch_size": 64,
         "nT":10,
         "device": "cuda",
         "attention_heads": 8,
         "cond_mask": 0.0,
         "alpha1": 100,
         "alpha2": 1,
-        "PATH": "/tf/hsh/SW_ECG/ECG2ECG/1TO3"
+        "alphafft" : 0.1 , 
+        "PATH": "/cap/RDDM-main/hsh/ECG2ECG_FINAL/LEAD1TO4/withfft/",
+        "with_fftloss" : True ,
+        "sampling_rate" : 128 ,
+        "cutoff_freq" : 30.0 
     }
 
     train_rddm(config)
