@@ -18,13 +18,8 @@ class ECGDataset(Dataset):
         
         window_size = ecgall.shape[-1]
 
-        if self.with_ecgclean == True :
-            ecgall = nk.ecg_clean(ecgall.reshape(window_size), sampling_rate=128, method="pantompkins1985")
-            ecgcond = nk.ecg_clean(ecgcond.reshape(window_size), sampling_rate=128, method="pantompkins1985")
-
-        else :
-            ecgall = ecgall.reshape(window_size)
-            ecgcond = ecgcond.reshape(window_size)
+        ecgall = ecgall.reshape(window_size)
+        ecgcond = ecgcond.reshape(window_size)
 
         _, info = nk.ecg_peaks(ecgall, sampling_rate=128, method="pantompkins1985", correct_artifacts=True, show=False)
 
@@ -76,13 +71,13 @@ def get_datasets(
     ecgcond_test = np.nan_to_num(np.concatenate(ecgcond_test_list).astype("float32"))
 
     dataset_train = ECGDataset(
-        skp.minmax_scale(ecgall_train, (-1, 1), axis=1),
-        skp.minmax_scale(ecgcond_train, (-1, 1), axis=1),
+        ecgall_train,
+        ecgcond_train,
         with_ecgclean=with_ecgclean
     )
     dataset_test = ECGDataset(
-        skp.minmax_scale(ecgall_test, (-1, 1), axis=1),
-        skp.minmax_scale(ecgcond_test, (-1, 1), axis=1),
+        ecgall_test,
+        ecgcond_test,
         with_ecgclean=with_ecgclean
     )
 
