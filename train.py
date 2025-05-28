@@ -133,11 +133,17 @@ def train_rddm(config, resume_epoch=None):
 
             pbar.set_description(f"loss: {loss.mean().item():.4f}")
 
-            wandb.log({
-                "DDPM_loss": ddpm_loss.mean().item(),
-                "Region_loss": region_loss.mean().item(),
-                "fft_loss" : fft_loss.mean().item()
-            })
+            if with_fftloss :
+                wandb.log({
+                    "DDPM_loss": ddpm_loss.mean().item(),
+                    "Region_loss": region_loss.mean().item(),
+                    "fft_loss" : fft_loss.mean().item()
+                })
+            else :
+                wandb.log({
+                    "DDPM_loss": ddpm_loss.mean().item(),
+                    "Region_loss": region_loss.mean().item(),
+                })
 
         scheduler.step()
 

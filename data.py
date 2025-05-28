@@ -40,7 +40,7 @@ class ECGDataset(Dataset):
 
 def get_datasets(
     DATA_PATH = "/tf/hsh/SW_ECG/single_lead_data/",
-    datasets=[""],
+    datasets=["PTBXL"],
     window_size=5,
     with_ecgclean=True
     ):
