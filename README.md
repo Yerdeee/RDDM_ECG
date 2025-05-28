@@ -32,8 +32,17 @@ train_loader, val_loader, test_loader = get_dataset_withdiffusion(DATA_PATH = '/
 2. RDDM_classification.ipynb 추가  
 - 생성된 신호로 1d/2d cnn 기반 분류 성능 확인 ipynb 파일 추가  
 
-3. std_eval.py 수정  
-- naive Diffusion, RDDM 둘다 한번에 성능 비교 가능하도록 코드 수정  
+3. std_eval.py 수정
+- naive Diffusion, RDDM 둘다 한번에 성능 비교 가능하도록 코드 수정
+
+
+## 2025.05.28 수정
+
+1. train.py : fftloss / fftcond 추가
+- config 변수 활용하여 fftloss, fftcond 사용 할지 안할지 선택 가능
+
+2. model.py : fft condition 모델 추가
+- ConditionNetWithFFT class 활용하면 사용 가능
   
 
 
