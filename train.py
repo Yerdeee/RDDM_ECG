@@ -70,9 +70,9 @@ def train_rddm(config, resume_epoch=None):
         
         Conditioning_network1 = ConditionNetWithFFT(device=device).to(device)
         Conditioning_network2 = ConditionNetWithFFT(device=device).to(device)
-    
-    Conditioning_network1 = ConditionNet().to(device)
-    Conditioning_network2 = ConditionNet().to(device)
+    else:
+        Conditioning_network1 = ConditionNet().to(device)
+        Conditioning_network2 = ConditionNet().to(device)
     rddm.to(device)
 
     optim = torch.optim.AdamW([*rddm.parameters(), *Conditioning_network1.parameters(), *Conditioning_network2.parameters()], lr=1e-4)
@@ -81,7 +81,7 @@ def train_rddm(config, resume_epoch=None):
     Conditioning_network1 = nn.DataParallel(Conditioning_network1)
     Conditioning_network2 = nn.DataParallel(Conditioning_network2)
 
-    scheduler = CosineAnnealingLRWarmup(optim, 20, 500)
+    scheduler = CosineAnnealingLRWarmup(optim, 20, n_epoch)
 
 
     if resume_epoch is not None:
