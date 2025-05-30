@@ -18,8 +18,8 @@ class ECGDataset(Dataset):
         
         window_size = ecgall.shape[-1]
 
-        ecgall = ecgall.reshape(window_size)
-        ecgcond = ecgcond.reshape(window_size)
+        ecgall = nk.ecg_clean(ecgall.reshape(window_size), sampling_rate=128, method="pantompkins1985")
+        ecgcond = nk.ecg_clean(ecgcond.reshape(window_size), sampling_rate=128, method="pantompkins1985")
 
         _, info = nk.ecg_peaks(ecgall, sampling_rate=128, method="pantompkins1985", correct_artifacts=True, show=False)
 
