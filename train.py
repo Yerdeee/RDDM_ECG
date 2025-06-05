@@ -115,11 +115,11 @@ def train_rddm(config, resume_epoch=None):
             ecg_conditions1 = Conditioning_network1(x_ecg)
             ecg_conditions2 = Conditioning_network2(x_ecg)
 
-            ddpm_loss, region_loss = rddm(x=y_ecg, cond1=ecg_conditions1, cond2=ecg_conditions2, patch_labels=ecg_roi)
+            ddpm_loss, region_loss, pred_signal = rddm(x=y_ecg, cond1=ecg_conditions1, cond2=ecg_conditions2, patch_labels=ecg_roi)
 
             fft_loss = 0
-            if with_fftloss :
-                fft_loss = compute_fft_loss(y_ecg, x_ecg)
+            if with_fftloss:
+                fft_loss = compute_fft_loss(pred_signal, y_ecg)
 
             ddpm_loss = alpha1 * ddpm_loss
             region_loss = alpha2 * region_loss

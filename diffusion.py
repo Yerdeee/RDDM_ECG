@@ -127,7 +127,7 @@ class RDDM(nn.Module):
         
         return masked_noise, random_noise
 
-    def forward(self, x=None, cond1=None, cond2=None, mode="train", patch_labels=None, window_size=128*4):
+    def forward(self, x=None, cond1=None, cond2=None, mode="train", patch_labels=None, window_size=128*5):
 
         if mode == "train":
             
@@ -155,7 +155,7 @@ class RDDM(nn.Module):
 
             region_loss = self.criterion(pred_x_t, x_t)
 
-            return ddpm_loss, region_loss
+            return ddpm_loss, region_loss, pred_x_t
 
         elif mode == "sample":
 
