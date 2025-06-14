@@ -34,7 +34,7 @@ def set_deterministic(seed):
 def get_datasets(
     DATA_PATH = "/tf/hsh/ECG_capstone/data/", 
     #datasets=["BIDMC", "CAPNO", "DALIA", "MIMIC-AFib", "WESAD"],
-    datasets=["PTBXL"],
+    datasets=[""],
     window_size=10, lead_num=12
     ):
 
@@ -121,14 +121,14 @@ def get_dataset_withdiffusion(MODEL_PATH = "/tf/hsh/ECG_capstone/ECG2ECG_FINAL/L
     set_deterministic(31)
     
     for i in range(len(lead_num)) :
-        _, dataset_test = get_datasets(DATA_PATH = DATA_PATH, datasets=["PTBXL"], window_size=10, lead_num = lead_num[i])
+        _, dataset_test = get_datasets(DATA_PATH = DATA_PATH, datasets=[""], window_size=10, lead_num = lead_num[i])
         
         testloader = DataLoader(dataset_test, batch_size=16, shuffle=True, num_workers=64)
         
         dpm, Conditioning_network1, Conditioning_network2 = load_pretrained_DPM(
                 PATH=MODEL_PATH + str(lead_num[i]) + '/',
                 nT=10,
-                type="RDDM",
+                type="RDDMfft",
                 device="cuda")
             
         dpm = nn.DataParallel(dpm)
@@ -154,10 +154,10 @@ def get_dataset_withdiffusion(MODEL_PATH = "/tf/hsh/ECG_capstone/ECG2ECG_FINAL/L
         
                 generated_windows = []
         
-                for ppg_window in torch.split(x_ppg, 128*10, dim=-1):
+                for ppg_window in torch.split(x_ppg, 128*5, dim=-1):
                     
-                    if ppg_window.shape[-1] != 128*10:
-                        ppg_window = F.pad(ppg_window, (0, 128*10 - ppg_window.shape[-1]), "constant", 0)
+                    if ppg_window.shape[-1] != 128*5:
+                        ppg_window = F.pad(ppg_window, (0, 128*5 - ppg_window.shape[-1]), "constant", 0)
         
                     ppg_conditions1 = Conditioning_network1(ppg_window)
                     ppg_conditions2 = Conditioning_network2(ppg_window)
@@ -166,7 +166,7 @@ def get_dataset_withdiffusion(MODEL_PATH = "/tf/hsh/ECG_capstone/ECG2ECG_FINAL/L
                         cond1=ppg_conditions1, 
                         cond2=ppg_conditions2, 
                         mode="sample", 
-                        window_size=128*10
+                        window_size=128*5
                     )
                         
                     generated_windows.append(xh.cpu().numpy())
